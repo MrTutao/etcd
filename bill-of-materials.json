@@ -27,7 +27,16 @@
 		]
 	},
 	{
-		"project": "github.com/coreos/go-systemd",
+		"project": "github.com/coreos/go-systemd/journal",
+		"licenses": [
+			{
+				"type": "Apache License 2.0",
+				"confidence": 0.9966703662597114
+			}
+		]
+	},
+	{
+		"project": "github.com/coreos/go-systemd/v22",
 		"licenses": [
 			{
 				"type": "Apache License 2.0",
@@ -405,7 +414,7 @@
 		]
 	},
 	{
-		"project": "google.golang.org/genproto/googleapis/rpc/status",
+		"project": "google.golang.org/genproto",
 		"licenses": [
 			{
 				"type": "Apache License 2.0",

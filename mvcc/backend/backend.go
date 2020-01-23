@@ -238,7 +238,7 @@ func (b *backend) Snapshot() Snapshot {
 		defer close(donec)
 		// sendRateBytes is based on transferring snapshot data over a 1 gigabit/s connection
 		// assuming a min tcp throughput of 100MB/s.
-		var sendRateBytes int64 = 100 * 1024 * 1014
+		var sendRateBytes int64 = 100 * 1024 * 1024
 		warningTimeout := time.Duration(int64((float64(dbBytes) / float64(sendRateBytes)) * float64(time.Second)))
 		if warningTimeout < minSnapshotWarningTimeout {
 			warningTimeout = minSnapshotWarningTimeout
@@ -257,7 +257,7 @@ func (b *backend) Snapshot() Snapshot {
 						zap.String("size", humanize.Bytes(uint64(dbBytes))),
 					)
 				} else {
-					plog.Warningf("snapshotting is taking more than %v seconds to finish transferring %v MB [started at %v]", time.Since(start).Seconds(), float64(dbBytes)/float64(1024*1014), start)
+					plog.Warningf("snapshotting is taking more than %v seconds to finish transferring %v MB [started at %v]", time.Since(start).Seconds(), float64(dbBytes)/float64(1024*1024), start)
 				}
 
 			case <-stopc:
@@ -391,7 +391,13 @@ func (b *backend) defrag() error {
 	err = defragdb(b.db, tmpdb, defragLimit)
 	if err != nil {
 		tmpdb.Close()
-		os.RemoveAll(tmpdb.Path())
+		if rmErr := os.RemoveAll(tmpdb.Path()); rmErr != nil {
+			if b.lg != nil {
+				b.lg.Error("failed to remove dirs under tmpdb", zap.Error(rmErr))
+			} else {
+				plog.Errorf("failed to remove dirs under tmpdb (%s)", rmErr)
+			}
+		}
 		return err
 	}
 
@@ -464,6 +470,11 @@ func defragdb(odb, tmpdb *bolt.DB, limit int) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			tmptx.Rollback()
+		}
+	}()
 
 	// open a tx on old db for read
 	tx, err := odb.Begin(false)
@@ -487,7 +498,7 @@ func defragdb(odb, tmpdb *bolt.DB, limit int) error {
 		}
 		tmpb.FillPercent = 0.9 // for seq write in for each
 
-		b.ForEach(func(k, v []byte) error {
+		if err = b.ForEach(func(k, v []byte) error {
 			count++
 			if count > limit {
 				err = tmptx.Commit()
@@ -504,7 +515,9 @@ func defragdb(odb, tmpdb *bolt.DB, limit int) error {
 				count = 0
 			}
 			return tmpb.Put(k, v)
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	return tmptx.Commit()

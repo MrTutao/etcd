@@ -39,6 +39,7 @@ import (
 	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/backend"
 	"go.etcd.io/etcd/pkg/fileutil"
+	"go.etcd.io/etcd/pkg/traceutil"
 	"go.etcd.io/etcd/pkg/types"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -383,8 +384,8 @@ func (s *v3Manager) saveDB() error {
 	// a lessor never timeouts leases
 	lessor := lease.NewLessor(s.lg, be, lease.LessorConfig{MinLeaseTTL: math.MaxInt64})
 
-	mvs := mvcc.NewStore(s.lg, be, lessor, (*initIndex)(&commit))
-	txn := mvs.Write()
+	mvs := mvcc.NewStore(s.lg, be, lessor, (*initIndex)(&commit), mvcc.StoreConfig{CompactionBatchLimit: math.MaxInt32})
+	txn := mvs.Write(traceutil.TODO())
 	btx := be.BatchTx()
 	del := func(k, v []byte) error {
 		txn.DeleteRange(k, nil)
