@@ -23,11 +23,11 @@ import (
 	"testing"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/clientv3/leasing"
-	"go.etcd.io/etcd/integration"
-	"go.etcd.io/etcd/pkg/testutil"
+	"go.etcd.io/etcd/v3/clientv3"
+	"go.etcd.io/etcd/v3/clientv3/concurrency"
+	"go.etcd.io/etcd/v3/clientv3/leasing"
+	"go.etcd.io/etcd/v3/integration"
+	"go.etcd.io/etcd/v3/pkg/testutil"
 )
 
 func TestLeasingPutGet(t *testing.T) {
@@ -1575,12 +1575,16 @@ func TestLeasingTxnAtomicCache(t *testing.T) {
 	var wgPutters, wgGetters sync.WaitGroup
 	wgPutters.Add(numPutters)
 	wgGetters.Add(numGetters)
+	txnerrCh := make(chan error, 1)
 
 	f := func() {
 		defer wgPutters.Done()
 		for i := 0; i < 10; i++ {
-			if _, txnerr := lkv.Txn(context.TODO()).Then(puts...).Commit(); err != nil {
-				t.Fatal(txnerr)
+			if _, txnerr := lkv.Txn(context.TODO()).Then(puts...).Commit(); txnerr != nil {
+				select {
+				case txnerrCh <- txnerr:
+				default:
+				}
 			}
 		}
 	}
@@ -1619,6 +1623,11 @@ func TestLeasingTxnAtomicCache(t *testing.T) {
 	}
 
 	wgPutters.Wait()
+	select {
+	case txnerr := <-txnerrCh:
+		t.Fatal(txnerr)
+	default:
+	}
 	close(donec)
 	wgGetters.Wait()
 }
